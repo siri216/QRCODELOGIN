@@ -6,7 +6,7 @@ document.getElementById("scanQR").addEventListener("click", function () {
         console.log("Scanned QR Code:", decodedText);
 
         // Send scanned serial number to backend
-        fetch("https://qrcodelogin-1.onrender.com/fetch-user-details", {
+        fetch("https://qrcodelogin-1-mldp.onrender.com/fetch-user-details", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ serialNumber: decodedText })
@@ -38,7 +38,7 @@ document.getElementById("scanQR").addEventListener("click", function () {
 document.getElementById("downloadPDF").addEventListener("click", function () {
     let userId = this.getAttribute("data-user-id");
 
-    fetch(`https://qrcodelogin-1.onrender.com/download-pdf?userId=${userId}`, {
+    fetch(`https://qrcodelogin-1-mldp.onrender.com/download-pdf?userId=${userId}`, {
         method: "GET"
     })
     .then(response => response.blob())
