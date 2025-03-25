@@ -14,7 +14,7 @@ document.getElementById("scanQR").addEventListener("click", function () {
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                alert("User details fetched successfully!");
+                alert("User  details fetched successfully!");
 
                 // Show "Download PDF" button
                 document.getElementById("downloadPDF").style.display = "block";
@@ -45,7 +45,7 @@ document.getElementById("downloadPDF").addEventListener("click", function () {
     .then(blob => {
         let link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = "UserDetails.pdf";
+        link.download = "User Details.pdf";
         link.click();
     })
     .catch(error => {
@@ -53,5 +53,3 @@ document.getElementById("downloadPDF").addEventListener("click", function () {
         alert("Failed to download the PDF.");
     });
 });
-
-
