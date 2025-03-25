@@ -3,14 +3,13 @@ const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const { Pool } = require("pg");
-const PDFDocument = require("pdfkit"); // PDF generation library
 
 const app = express();
 app.use(cors({ origin: "https://qrcodelogin-1.onrender.com" }));
 app.use(bodyParser.json());
 
 const pool = new Pool({
-    connectionString: "postgresql://neondb_owner:npg_TeDH7Gu4bWfn@ep-fancy-fire-a5fzqtc0-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+    connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
@@ -21,50 +20,30 @@ pool.connect()
         process.exit(1);
     });
 
-let otpStore = {};
-
+// Health Check
 app.get("/", (req, res) => {
     res.send("Server is running successfully!");
 });
 
-app.post("/send-otp", (req, res) => {
-    const { phone } = req.body;
-    if (!phone) {
-        return res.status(400).json({ message: "Phone number is required!" });
-    }
+// Fetch and Validate QR Code
+app.post("/fetch-user-details", async (req, res) => {
+    const { serialNumber } = req.body; // Removed phone as it was not used
 
-    const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
-    otpStore[phone] = otp;
-    console.log(`Generated OTP for ${phone}: ${otp}`);
-
-    res.json({ otp });
-});
-
-app.post("/verify-otp", (req, res) => {
-    const { phone, otp } = req.body;
-    if (otpStore[phone] && otpStore[phone].toString() === otp.toString()) {
-        delete otpStore[phone];
-        res.json({ success: true, message: "OTP Verified!" });
-    } else {
-        res.json({ success: false, message: "Invalid OTP! Please try again." });
-    }
-});
-
-app.post("/scan-qr", async (req, res) => {
-    const { serialNumber } = req.body;
     if (!serialNumber) {
-        return res.status(400).json({ message: "Serial number is required!" });
+        return res.status(400).json({ success: false, message: "Serial Number is required." });
     }
 
     try {
-        const result = await pool.query("SELECT * FROM qr_codes WHERE serial_number = $1", [serialNumber]);
+        const qrCode = await pool.query("SELECT * FROM qr_codes WHERE serial_number = $1", [serialNumber]);
 
-        if (result.rows.length === 0) {
-            return res.json({ message: "QR Code not found!" });
+        if (qrCode.rowCount === 0) {
+            return res.status(404).json({ success: false, message: "QR Code not found" });
         }
 
-        if (result.rows[0].scanned) {
-            return res.json({ message: "QR Code already scanned!" });
+        const qrData = qrCode.rows[0];
+
+        if (qrData.scanned) {
+            return res.status(400).json({ success: false, expired: true, message: "QR Code already used!" });
         }
 
         await pool.query(
@@ -72,45 +51,4 @@ app.post("/scan-qr", async (req, res) => {
             [serialNumber]
         );
 
-        res.json({
-            message: "QR Code scanned successfully!",
-            download: true // Let frontend know a download is available
-        });
-
-    } catch (error) {
-        console.error("Database error:", error);
-        return res.status(500).json({ message: "Database error", error });
-    }
-});
-
-// PDF Generation and Download
-app.get("/download-pdf", (req, res) => {
-    const { serialNumber } = req.query;
-    if (!serialNumber) {
-        return res.status(400).send("Serial number is required");
-    }
-
-    res.setHeader("Content-Disposition", `attachment; filename="QR_Scan_${serialNumber}.pdf"`);
-    res.setHeader("Content-Type", "application/pdf");
-
-    const doc = new PDFDocument();
-    doc.pipe(res);
-
-    doc.fontSize(20).text("QR Code Scan Report", { align: "center" });
-    doc.moveDown();
-    doc.fontSize(14).text(`Serial Number: ${serialNumber}`);
-    doc.fontSize(14).text(`Scanned At: ${new Date().toLocaleString()}`);
-    
-    doc.end();
-});
-
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
-
-
-
-
-
-
+        return res.status(200).json({ success: true, userId: qrData.id, message
