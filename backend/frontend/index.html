@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Login</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/html5-qrcode"></script> <!-- QR Scanner Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script> <!-- jsPDF Library -->
+    <style>
+        input, button {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="NimbleLogo.png" class="logo" alt="Company Logo">
+        
+        <h2>QR Code Login</h2>
+
+        <!-- Phone Input and Send OTP -->
+        <label for="phone" id="phoneLabel">Enter Phone Number:</label>
+        <input type="text" id="phone" placeholder="Enter phone number">
+        <br>
+        <button id="sendOTP">Send OTP</button>
+
+        <!-- OTP Section (Initially Hidden) -->
+        <div id="otpSection" style="display: none;">
+            <p id="otpDisplay"></p> <!-- OTP Display -->
+            <label for="otp" id="otpLabel">Enter OTP:</label>
+            <input type="text" id="otp" placeholder="Enter OTP">
+            <br>
+            <button id="verifyOTP">Verify OTP</button>
+        </div>
+
+        <!-- QR Scanner Section (Initially Hidden) -->
+        <div id="qrSection" style="display: none;">
+            <button id="scanQR">Scan QR Code</button>
+            <p id="scanMessage" style="color: rgb(0, 128, 2); font-weight: bold;"></p>
+            <div id="qr-video" style="width: 100%;"></div>
+            <button id="downloadPDF" style="display: none;">Download PDF</button>
+        </div>
+    </div>
+
+    <script>
+        let scanner;
+
+        document.getElementById("sendOTP").addEventListener("click", function() {
+            let phone = document.getElementById("phone").value;
+            fetch("https://qrcodelogin.onrender.com/send-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone })
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById("otpSection").style.display = "block";
+                document.getElementById("otpDisplay").innerText = "Your OTP: " + data.otp;
+
+                document.getElementById("phone").style.display = "none";
+                document.getElementById("sendOTP").style.display = "none";
+                document.getElementById("phoneLabel").style.display = "none";
+            });
+        });
+
+        document.getElementById("verifyOTP").addEventListener("click", function() {
+            let phone = document.getElementById("phone").value;
+            let otp = document.getElementById("otp").value;
+            fetch("https://qrcodelogin.onrender.com/verify-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone, otp })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById("qrSection").style.display = "block";
+                } else {
+                    alert("Invalid OTP!");
+                }
+            });
+        });
+
+        document.getElementById("scanQR").addEventListener("click", function() {
+            if (!scanner) {
+                scanner = new Html5QrcodeScanner("qr-video", { fps: 10, qrbox: 250 });
+            }
+
+            scanner.render((decodedText) => {
+                scanner.clear();
+                scanner = null;
+                document.getElementById("scanMessage").innerText = "Scanned: " + decodedText;
+                document.getElementById("downloadPDF").style.display = "block";
+                document.getElementById("downloadPDF").setAttribute("data-content", decodedText);
+            });
+        });
+
+        document.getElementById("downloadPDF").addEventListener("click", function() {
+            let { jsPDF } = window.jspdf;
+            let pdf = new jsPDF();
+            let qrContent = document.getElementById("downloadPDF").getAttribute("data-content");
+            pdf.text("Scanned QR Code Data:", 10, 10);
+            pdf.text(qrContent, 10, 20);
+            pdf.save("QR_Code_Result.pdf");
+        });
+    </script>
+</body>
+</html>
+
+
