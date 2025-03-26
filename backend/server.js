@@ -6,7 +6,7 @@ const { Pool } = require("pg");
 
 const app = express();
 
-// ✅ Allow multiple frontend URLs
+// Allow multiple frontend origins dynamically
 const allowedOrigins = [
     "https://qrcodelogin-1.onrender.com",
     "https://qrcodelogin-1-mldp.onrender.com"
@@ -25,6 +25,7 @@ app.use(cors({
 
 app.use(bodyParser.json());
 
+// PostgreSQL Connection
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -39,12 +40,12 @@ pool.connect()
 
 let otpStore = {};
 
-// ✅ Health Check
+// Health Check Route
 app.get("/", (req, res) => {
     res.send("Server is running successfully!");
 });
 
-// ✅ Send OTP
+// Send OTP
 app.post("/send-otp", (req, res) => {
     const { phone } = req.body;
     if (!phone) {
@@ -58,7 +59,7 @@ app.post("/send-otp", (req, res) => {
     res.json({ otp, message: "OTP sent successfully." });
 });
 
-// ✅ Verify OTP
+// Verify OTP
 app.post("/verify-otp", (req, res) => {
     const { phone, otp } = req.body;
     if (otpStore[phone] && otpStore[phone].toString() === otp.toString()) {
@@ -69,7 +70,7 @@ app.post("/verify-otp", (req, res) => {
     }
 });
 
-// ✅ Fetch and Validate QR Code
+// Fetch and Validate QR Code
 app.post("/fetch-user-details", async (req, res) => {
     const { serialNumber, phone } = req.body;
 
@@ -102,5 +103,6 @@ app.post("/fetch-user-details", async (req, res) => {
     }
 });
 
+// Start the Server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
