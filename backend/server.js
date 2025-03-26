@@ -3,31 +3,14 @@ const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 const { Pool } = require("pg");
+const PDFDocument = require("pdfkit"); // PDF generation library
 
 const app = express();
-
-// Allow multiple frontend origins dynamically
-const allowedOrigins = [
-    "https://qrcodelogin-1.onrender.com",
-    "https://qrcodelogin-1-mldp.onrender.com"
-];
-
-app.use(cors({
-    origin: function (origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error("Not allowed by CORS"));
-        }
-    },
-    credentials: true
-}));
-
+app.use(cors({ origin: "https://qrcodelogin-1.onrender.com" }));
 app.use(bodyParser.json());
 
-// PostgreSQL Connection
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: "postgresql://neondb_owner:npg_TeDH7Gu4bWfn@ep-fancy-fire-a5fzqtc0-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
     ssl: { rejectUnauthorized: false }
 });
 
@@ -40,12 +23,10 @@ pool.connect()
 
 let otpStore = {};
 
-// Health Check Route
 app.get("/", (req, res) => {
     res.send("Server is running successfully!");
 });
 
-// Send OTP
 app.post("/send-otp", (req, res) => {
     const { phone } = req.body;
     if (!phone) {
@@ -54,55 +35,70 @@ app.post("/send-otp", (req, res) => {
 
     const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
     otpStore[phone] = otp;
-    console.log(`Generated OTP for ${phone}: ${otp}`);
+    console.log(Generated OTP for ${phone}: ${otp});
 
-    res.json({ otp, message: "OTP sent successfully." });
+    res.json({ otp });
 });
 
-// Verify OTP
 app.post("/verify-otp", (req, res) => {
     const { phone, otp } = req.body;
     if (otpStore[phone] && otpStore[phone].toString() === otp.toString()) {
         delete otpStore[phone];
-        res.json({ success: true, message: "OTP Verified Successfully!" });
+        res.json({ success: true, message: "OTP Verified!" });
     } else {
-        res.status(401).json({ success: false, message: "Invalid OTP! Please try again." });
+        res.json({ success: false, message: "Invalid OTP! Please try again." });
     }
 });
 
-// Fetch and Validate QR Code
 app.post("/fetch-user-details", async (req, res) => {
-    const { serialNumber, phone } = req.body;
-
-    if (!serialNumber || !phone) {
-        return res.status(400).json({ success: false, message: "Serial Number and Phone are required." });
-    }
+    const { serialNumber } = req.body;
 
     try {
-        const qrCode = await pool.query("SELECT * FROM qr_codes WHERE serial_number = $1", [serialNumber]);
+        const qrCode = await db.query("SELECT * FROM qr_codes WHERE serial_number = $1", [serialNumber]);
 
         if (qrCode.rowCount === 0) {
-            return res.status(404).json({ success: false, message: "QR Code not found" });
+            return res.json({ success: false, message: "QR Code not found" });
         }
 
         const qrData = qrCode.rows[0];
 
         if (qrData.scanned) {
-            return res.status(400).json({ success: false, expired: true, message: "QR Code already used!" });
+            return res.json({ success: false, expired: true, message: "QR Code already used!" });
         }
 
-        await pool.query(
-            "UPDATE qr_codes SET scanned = TRUE, scanned_at = NOW(), phone_number = $1 WHERE serial_number = $2",
-            [phone, serialNumber]
-        );
+        // Mark as scanned
+        await db.query("UPDATE qr_codes SET scanned = TRUE, scanned_at = NOW() WHERE serial_number = $1", [serialNumber]);
 
-        return res.status(200).json({ success: true, userId: qrData.id, message: "QR Code scanned successfully!" });
+        return res.json({ success: true, userId: qrData.id });
     } catch (error) {
         console.error("Error fetching user details:", error);
-        return res.status(500).json({ success: false, message: "Internal server error" });
+        return res.status(500).json({ success: false, message: "Server error" });
     }
 });
 
-// Start the Server
+
+// PDF Generation and Download
+app.get("/download-pdf", (req, res) => {
+    const { serialNumber } = req.query;
+    if (!serialNumber) {
+        return res.status(400).send("Serial number is required");
+    }
+
+    res.setHeader("Content-Disposition", attachment; filename="QR_Scan_${serialNumber}.pdf");
+    res.setHeader("Content-Type", "application/pdf");
+
+    const doc = new PDFDocument();
+    doc.pipe(res);
+
+    doc.fontSize(20).text("QR Code Scan Report", { align: "center" });
+    doc.moveDown();
+    doc.fontSize(14).text(Serial Number: ${serialNumber});
+    doc.fontSize(14).text(Scanned At: ${new Date().toLocaleString()});
+    
+    doc.end();
+});
+
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(Server running on port ${PORT}));
+app.listen(PORT, () => {
+    console.log(Server running on port ${PORT});
+});
