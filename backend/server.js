@@ -27,9 +27,14 @@ app.use(cors({
 app.use(bodyParser.json());
 
 // PostgreSQL Connection
+const { Pool } = require("pg");
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: {
+        require: true,  // Force SSL
+        rejectUnauthorized: false  // Ignore self-signed cert errors
+    }
 });
 
 pool.connect()
@@ -38,6 +43,7 @@ pool.connect()
         console.error("Database connection failed: ", err);
         process.exit(1);
     });
+
 
 app.post("/send-otp", (req, res) => {
     const { phone } = req.body;
