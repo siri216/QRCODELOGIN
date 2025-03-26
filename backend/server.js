@@ -5,7 +5,7 @@ const bodyParser = require("body-parser");
 const { Pool } = require("pg");
 
 const app = express();
-app.use(cors({ origin: "https://qrcodelogin-1.onrender.com" }));
+app.use(cors({ origin: "https://qrcodelogin-1-mldp.onrender.com" }));
 app.use(bodyParser.json());
 
 // PostgreSQL Database Connection
