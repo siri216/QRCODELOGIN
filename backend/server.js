@@ -5,7 +5,24 @@ const bodyParser = require("body-parser");
 const { Pool } = require("pg");
 
 const app = express();
-app.use(cors({ origin: "https://qrcodelogin-1.onrender.com" }));
+
+// ✅ Allow multiple frontend URLs
+const allowedOrigins = [
+    "https://qrcodelogin-1.onrender.com",
+    "https://qrcodelogin-1-mldp.onrender.com"
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error("Not allowed by CORS"));
+        }
+    },
+    credentials: true
+}));
+
 app.use(bodyParser.json());
 
 const pool = new Pool({
@@ -22,12 +39,12 @@ pool.connect()
 
 let otpStore = {};
 
-// Health Check
+// ✅ Health Check
 app.get("/", (req, res) => {
     res.send("Server is running successfully!");
 });
 
-// Send OTP
+// ✅ Send OTP
 app.post("/send-otp", (req, res) => {
     const { phone } = req.body;
     if (!phone) {
@@ -41,7 +58,7 @@ app.post("/send-otp", (req, res) => {
     res.json({ otp, message: "OTP sent successfully." });
 });
 
-// Verify OTP
+// ✅ Verify OTP
 app.post("/verify-otp", (req, res) => {
     const { phone, otp } = req.body;
     if (otpStore[phone] && otpStore[phone].toString() === otp.toString()) {
@@ -52,7 +69,7 @@ app.post("/verify-otp", (req, res) => {
     }
 });
 
-// Fetch and Validate QR Code
+// ✅ Fetch and Validate QR Code
 app.post("/fetch-user-details", async (req, res) => {
     const { serialNumber, phone } = req.body;
 
