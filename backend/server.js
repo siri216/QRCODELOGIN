@@ -6,7 +6,7 @@ const { Pool } = require("pg");
 
 const app = express();
 
-// Allow multiple frontend origins dynamically
+// Allowed Frontend Origins
 const allowedOrigins = [
     "https://qrcodelogin-1.onrender.com",
     "https://qrcodelogin-1-mldp.onrender.com"
@@ -17,6 +17,7 @@ app.use(cors({
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
+            console.log("Blocked by CORS: ", origin);
             callback(new Error("Not allowed by CORS"));
         }
     },
@@ -38,69 +39,14 @@ pool.connect()
         process.exit(1);
     });
 
-let otpStore = {};
-
-// Health Check Route
-app.get("/", (req, res) => {
-    res.send("Server is running successfully!");
-});
-
-// Send OTP
 app.post("/send-otp", (req, res) => {
     const { phone } = req.body;
-    if (!phone) {
-        return res.status(400).json({ message: "Phone number is required!" });
-    }
+    if (!phone) return res.status(400).json({ message: "Phone number is required!" });
 
     const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
-    otpStore[phone] = otp;
     console.log(`Generated OTP for ${phone}: ${otp}`);
 
     res.json({ otp, message: "OTP sent successfully." });
-});
-
-// Verify OTP
-app.post("/verify-otp", (req, res) => {
-    const { phone, otp } = req.body;
-    if (otpStore[phone] && otpStore[phone].toString() === otp.toString()) {
-        delete otpStore[phone];
-        res.json({ success: true, message: "OTP Verified Successfully!" });
-    } else {
-        res.status(401).json({ success: false, message: "Invalid OTP! Please try again." });
-    }
-});
-
-// Fetch and Validate QR Code
-app.post("/fetch-user-details", async (req, res) => {
-    const { serialNumber, phone } = req.body;
-
-    if (!serialNumber || !phone) {
-        return res.status(400).json({ success: false, message: "Serial Number and Phone are required." });
-    }
-
-    try {
-        const qrCode = await pool.query("SELECT * FROM qr_codes WHERE serial_number = $1", [serialNumber]);
-
-        if (qrCode.rowCount === 0) {
-            return res.status(404).json({ success: false, message: "QR Code not found" });
-        }
-
-        const qrData = qrCode.rows[0];
-
-        if (qrData.scanned) {
-            return res.status(400).json({ success: false, expired: true, message: "QR Code already used!" });
-        }
-
-        await pool.query(
-            "UPDATE qr_codes SET scanned = TRUE, scanned_at = NOW(), phone_number = $1 WHERE serial_number = $2",
-            [phone, serialNumber]
-        );
-
-        return res.status(200).json({ success: true, userId: qrData.id, message: "QR Code scanned successfully!" });
-    } catch (error) {
-        console.error("Error fetching user details:", error);
-        return res.status(500).json({ success: false, message: "Internal server error" });
-    }
 });
 
 // Start the Server
