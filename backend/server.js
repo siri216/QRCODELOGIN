@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const { Pool } = require("pg");
+const { Pool } = require("pg"); // ✅ Importing correctly
 
 const app = express();
 
@@ -27,8 +27,6 @@ app.use(cors({
 app.use(bodyParser.json());
 
 // PostgreSQL Connection
-const Pool = require("pg").Pool;
-
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
@@ -43,7 +41,6 @@ pool.connect()
         console.error("Database connection failed: ", err);
         process.exit(1);
     });
-
 
 app.post("/send-otp", (req, res) => {
     const { phone } = req.body;
