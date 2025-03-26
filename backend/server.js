@@ -54,7 +54,7 @@ app.post("/send-otp", (req, res) => {
 
     const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
     otpStore[phone] = otp;
-    console.log(Generated OTP for ${phone}: ${otp});
+    console.log(`Generated OTP for ${phone}: ${otp}`);
 
     res.json({ otp, message: "OTP sent successfully." });
 });
