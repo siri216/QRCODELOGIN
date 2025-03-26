@@ -27,6 +27,8 @@ app.use(cors({
 app.use(bodyParser.json());
 
 // PostgreSQL Connection
+const Pool = require("pg").Pool;
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
