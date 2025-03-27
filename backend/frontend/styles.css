@@ -1,191 +1,73 @@
-body {
-    font-family: 'Poppins', sans-serif;
-    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
-    color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    margin: 0;
-    overflow: hidden;
-    position: relative;
-}
+let scanner;
 
-/* Animated Background */
-body::before {
-    content: "";
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    background: url('https://i.imgur.com/ysTrD8j.png'); /* Subtle futuristic pattern */
-    opacity: 0.15;
-    animation: moveBackground 30s linear infinite;
-    z-index: -1;
-}
+// ✅ Send OTP Button Click
+document.getElementById("sendOtpBtn").addEventListener("click", function () {
+    let phone = document.getElementById("phone").value;
+    let otpDisplay = document.getElementById("otpDisplay");
+    let otpSection = document.getElementById("otpSection");
 
-@keyframes moveBackground {
-    from { transform: translateY(0); }
-    to { transform: translateY(-100%); }
-}
+    if (phone.length !== 10) {
+        alert("Please enter a valid 10-digit phone number.");
+        return;
+    }
 
-.container {
-    background: rgba(255, 255, 255, 0.12);
-    padding: 25px;
-    border-radius: 18px;
-    text-align: center;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(15px);
-    transition: 0.3s ease-in-out;
-    max-width: 340px;
-    width: 100%;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    animation: fadeIn 1s ease-in-out;
-    position: relative;
-    overflow: hidden;
-}
+    fetch("https://qrcodelogin-luiz.onrender.com/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone })
+    })
+    .then(res => res.json())
+    .then(data => {
+        otpDisplay.innerText = "OTP: " + data.otp;
+        otpSection.style.display = "block";
+    })
+    .catch(err => console.error("Error sending OTP:", err));
+});
 
-.container:hover {
-    transform: scale(1.05);
-    box-shadow: 0 12px 28px rgba(255, 255, 255, 0.2);
-}
+// ✅ Verify OTP Button Click
+document.getElementById("verifyOtpBtn").addEventListener("click", function () {
+    let phone = document.getElementById("phone").value;
+    let otpInput = document.getElementById("otpInput").value;
+    let scanBtn = document.getElementById("scanQR");
 
-/* Logo Styling */
-.logo {
-    width: 120px;
-    height: auto;
-    margin-bottom: 15px;
-    filter: drop-shadow(0px 0px 10px rgba(0, 198, 255, 0.8));
-    border-radius: 50%;
-    border: 4px solid rgba(255, 255, 255, 0.4);
-}
+    fetch("https://qrcodelogin-luiz.onrender.com/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, otp: otpInput })
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert("✅ OTP Verified Successfully!");
+        scanBtn.style.display = "block"; // Show scan button
+    })
+    .catch(err => console.error("Error verifying OTP:", err));
+});
 
-/* Subtle Floating & Glow Effect for Title */
-h2 {
-    margin-bottom: 12px;
-    font-size: 22px;
-    font-weight: bold;
-    letter-spacing: 1px;
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
-    animation: floatTitle 3s ease-in-out infinite, glowTitle 3s infinite alternate;
-}
+// ✅ Scan QR Code Button Click
+document.getElementById("scanQR").addEventListener("click", function () {
+    if (!scanner) {
+        scanner = new Html5QrcodeScanner("qr-video", { fps: 10, qrbox: 250 });
+    }
 
-/* Floating Effect */
-@keyframes floatTitle {
-    0% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-    100% { transform: translateY(0); }
-}
+    scanner.render((decodedText) => {
+        scanner.clear();
+        scanner = null;
 
-/* Glow Effect */
-@keyframes glowTitle {
-    0% { text-shadow: 0 0 10px rgba(255, 255, 255, 0.6); }
-    100% { text-shadow: 0 0 20px rgba(0, 198, 255, 0.9); }
-}
+        let phoneNumber = document.getElementById("phone").value;
+        
+        fetch("https://qrcodelogin-luiz.onrender.com/fetch-user-details", {  // ✅ Fixed the API endpoint
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serialNumber: decodedText, phone: phoneNumber })
+        })
+        .then(res => res.json())
+        .then(data => {
+            alert(data.message);
 
-.input-group {
-    margin-bottom: 15px;
-    position: relative;
-}
-
-label {
-    display: block;
-    font-size: 14px;
-    margin-bottom: 5px;
-}
-
-input {
-    width: 100%;
-    padding: 8px;
-    border: none;
-    border-radius: 15px;
-    text-align: center;
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-    font-size: 16px;
-    transition: 0.3s;
-    outline: none;
-    border: 1px solid transparent;
-    box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.3);
-}
-
-input:focus {
-    border: 1px solid #00ffcc;
-    background: rgba(255, 255, 255, 0.25);
-    box-shadow: 0 0 10px rgba(0, 255, 204, 0.8);
-}
-
-/* Modern Button */
-button {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(90deg, #00c6ff, #0072ff);
-    color: white;
-    border: none;
-    border-radius: 50px;
-    cursor: pointer;
-    font-size: 16px;
-    transition: 0.3s;
-    box-shadow: 0 4px 10px rgba(0, 198, 255, 0.6);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: bold;
-    position: relative;
-    overflow: hidden;
-}
-
-button:hover {
-    background: linear-gradient(90deg, #0072ff, #00c6ff);
-    box-shadow: 0 6px 14px rgba(0, 198, 255, 0.8);
-}
-
-.hidden {
-    display: none;
-}
-
-/* Scan Message */
-#scanMessage {
-    font-weight: bold;
-    color: white;
-    margin-top: 8px;
-    text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
-    font-size: 18px;
-    padding: 10px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.952);
-}
-
-/* 🆕 "Download PDF" Button */
-#downloadPDF {
-    display: none;
-    width: 100%;
-    padding: 12px;
-    background: linear-gradient(90deg, #ff416c, #ff4b2b);
-    color: white;
-    border: none;
-    border-radius: 50px;
-    cursor: pointer;
-    font-size: 16px;
-    transition: 0.3s;
-    box-shadow: 0 4px 10px rgba(255, 100, 100, 0.6);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: bold;
-    margin-top: 15px;
-}
-
-#downloadPDF:hover {
-    background: linear-gradient(90deg, #ff4b2b, #ff416c);
-    box-shadow: 0 6px 14px rgba(255, 100, 100, 0.8);
-}
-
-/* Animate "Download PDF" Button when Visible */
-@keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-}
-
-#downloadPDF.show {
-    display: block;
-    animation: fadeIn 0.5s ease-in-out;
-}
-
+            if (data.expired) {
+                alert("⚠ This QR Code has already been used!");
+            }
+        })
+        .catch(err => console.error("❌ Error storing scan:", err));
+    });
+});
