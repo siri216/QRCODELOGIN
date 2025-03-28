@@ -12,7 +12,7 @@ app.use(bodyParser.json());
 const pool = new Pool({
     connectionString: "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
     ssl: {
-        rejectUnauthorized: false // Allows SSL connections
+        rejectUnauthorized: false
     }
 });
 
@@ -42,7 +42,10 @@ app.post("/send-otp", (req, res) => {
     }
 
     const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
-    otpStore[phone] = otp;
+    otpStore[phone] = {
+        otp: otp,
+        createdAt: new Date()
+    };
     console.log(`Generated OTP for ${phone}: ${otp}`);
 
     res.json({ otp });
@@ -51,10 +54,19 @@ app.post("/send-otp", (req, res) => {
 // Verify OTP
 app.post("/verify-otp", (req, res) => {
     const { phone, otp } = req.body;
-    console.log("Stored OTP:", otpStore[phone]);
-    console.log("Received OTP:", otp);
+    
+    if (!otpStore[phone]) {
+        return res.json({ success: false, message: "OTP expired or not generated!" });
+    }
 
-    if (otpStore[phone] && otpStore[phone].toString() === otp.toString()) {
+    // Check if OTP is expired (5 minutes)
+    const otpAge = (new Date() - new Date(otpStore[phone].createdAt)) / 1000 / 60;
+    if (otpAge > 5) {
+        delete otpStore[phone];
+        return res.json({ success: false, message: "OTP expired! Please request a new one." });
+    }
+
+    if (otpStore[phone].otp.toString() === otp.toString()) {
         delete otpStore[phone];
         res.json({ success: true, message: "OTP Verified!" });
     } else {
@@ -64,34 +76,93 @@ app.post("/verify-otp", (req, res) => {
 
 // Scan QR Code and store in database
 app.post("/scan-qr", async (req, res) => {
-    const { serialNumber } = req.body;
-    console.log("Received serial Number:", serialNumber);
+    const { serialNumber, phoneNumber } = req.body;
+    console.log("Received scan request:", { serialNumber, phoneNumber });
 
     if (!serialNumber) {
-        return res.status(400).json({ message: "Serial number is required!" });
+        return res.status(400).json({ success: false, message: "Serial number is required!" });
+    }
+
+    if (!phoneNumber) {
+        return res.status(400).json({ success: false, message: "Phone number is required!" });
     }
 
     try {
-        const result = await pool.query("SELECT * FROM qr_codes WHERE serial_number = $1", [serialNumber]);
-
-        if (result.rows.length === 0) {
-            return res.json({ message: "QR Code not found!" });
-        }
-
-        if (result.rows[0].scanned) {
-            return res.json({ message: "QR Code already scanned!" });
-        }
-
-        await pool.query(
-            "UPDATE qr_codes SET scanned = TRUE, scanned_at = NOW() WHERE serial_number = $1",
+        // Check if QR code exists
+        const checkResult = await pool.query(
+            "SELECT * FROM qr_codes WHERE serial_number = $1", 
             [serialNumber]
         );
 
-        return res.json({ message: "QR Code scanned successfully!" });
+        if (checkResult.rows.length === 0) {
+            return res.json({ 
+                success: false, 
+                message: "QR Code not found!",
+                expired: false
+            });
+        }
+
+        const qrCode = checkResult.rows[0];
+
+        // Check if already scanned
+        if (qrCode.scanned) {
+            return res.json({ 
+                success: false, 
+                message: "QR Code already scanned!",
+                expired: true,
+                scannedAt: qrCode.scanned_at,
+                scannedBy: qrCode.phone_number
+            });
+        }
+
+        // Update QR code record
+        const updateResult = await pool.query(
+            `UPDATE qr_codes 
+             SET phone_number = $1, scanned = TRUE, scanned_at = NOW() 
+             WHERE serial_number = $2
+             RETURNING *`,
+            [phoneNumber, serialNumber]
+        );
+
+        res.json({ 
+            success: true, 
+            message: "QR Code scanned successfully!",
+            data: updateResult.rows[0]
+        });
 
     } catch (error) {
         console.error("Database error:", error);
-        return res.status(500).json({ message: "Database error", error });
+        return res.status(500).json({ 
+            success: false, 
+            message: "Database error",
+            error: error.message 
+        });
+    }
+});
+
+// Additional endpoint to check QR code status
+app.post("/check-qr", async (req, res) => {
+    const { serialNumber } = req.body;
+    
+    try {
+        const result = await pool.query(
+            "SELECT * FROM qr_codes WHERE serial_number = $1",
+            [serialNumber]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({ exists: false });
+        }
+
+        res.json({
+            exists: true,
+            scanned: result.rows[0].scanned,
+            scannedAt: result.rows[0].scanned_at,
+            phoneNumber: result.rows[0].phone_number
+        });
+    } catch (error) {
+        console.error("Error checking QR code:", error);
+        res.status(500).json({ error: "Database error" });
     }
 });
 
