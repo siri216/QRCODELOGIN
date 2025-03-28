@@ -5,12 +5,16 @@ const bodyParser = require("body-parser");
 const { Pool } = require("pg");
 
 const app = express();
-app.use(cors({ origin: "https://qrcodelogin-1-mldp.onrender.com" }));
+
+// Middleware
+app.use(cors({ 
+    origin: ["https://qrcodelogin-1-mldp.onrender.com", "http://localhost:3000"] 
+}));
 app.use(bodyParser.json());
 
 // PostgreSQL Database Connection
 const pool = new Pool({
-    connectionString: "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+    connectionString: process.env.DATABASE_URL || "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
     ssl: {
         rejectUnauthorized: false
     }
@@ -29,16 +33,19 @@ let otpStore = {};
 
 // Base URL Route
 app.get("/", (req, res) => {
-    res.send("Server is running successfully!");
+    res.send("QR Code Login API Server is running successfully!");
 });
 
 // Generate and Send OTP
 app.post("/send-otp", (req, res) => {
-    console.log("Received request body:", req.body);
     const { phone } = req.body;
 
     if (!phone) {
-        return res.status(400).json({ message: "Phone number is required!" });
+        return res.status(400).json({ success: false, message: "Phone number is required!" });
+    }
+
+    if (phone.length !== 10) {
+        return res.status(400).json({ success: false, message: "Phone number must be 10 digits!" });
     }
 
     const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
@@ -46,9 +53,8 @@ app.post("/send-otp", (req, res) => {
         otp: otp,
         createdAt: new Date()
     };
-    console.log(`Generated OTP for ${phone}: ${otp}`);
 
-    res.json({ otp });
+    res.json({ success: true, otp: otp });
 });
 
 // Verify OTP
@@ -74,27 +80,29 @@ app.post("/verify-otp", (req, res) => {
     }
 });
 
-// Scan QR Code and store in database
+// Scan QR Code
 app.post("/scan-qr", async (req, res) => {
     const { serialNumber, phoneNumber } = req.body;
-    console.log("Received scan request:", { serialNumber, phoneNumber });
 
-    if (!serialNumber) {
-        return res.status(400).json({ success: false, message: "Serial number is required!" });
-    }
-
-    if (!phoneNumber) {
-        return res.status(400).json({ success: false, message: "Phone number is required!" });
+    if (!serialNumber || !phoneNumber) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Both serial number and phone number are required!" 
+        });
     }
 
     try {
-        // Check if QR code exists
-        const checkResult = await pool.query(
-            "SELECT * FROM qr_codes WHERE serial_number = $1", 
+        // Start transaction
+        await pool.query('BEGIN');
+
+        // 1. Check if QR code exists
+        const qrCheck = await pool.query(
+            `SELECT * FROM qr_codes WHERE serial_number = $1`,
             [serialNumber]
         );
 
-        if (checkResult.rows.length === 0) {
+        if (qrCheck.rows.length === 0) {
+            await pool.query('ROLLBACK');
             return res.json({ 
                 success: false, 
                 message: "QR Code not found!",
@@ -102,10 +110,11 @@ app.post("/scan-qr", async (req, res) => {
             });
         }
 
-        const qrCode = checkResult.rows[0];
+        const qrCode = qrCheck.rows[0];
 
-        // Check if already scanned
+        // 2. Check if already scanned (optional - remove if allowing multiple scans)
         if (qrCode.scanned) {
+            await pool.query('ROLLBACK');
             return res.json({ 
                 success: false, 
                 message: "QR Code already scanned!",
@@ -115,7 +124,7 @@ app.post("/scan-qr", async (req, res) => {
             });
         }
 
-        // Update QR code record
+        // 3. Update QR code record
         const updateResult = await pool.query(
             `UPDATE qr_codes 
              SET phone_number = $1, scanned = TRUE, scanned_at = NOW() 
@@ -124,50 +133,86 @@ app.post("/scan-qr", async (req, res) => {
             [phoneNumber, serialNumber]
         );
 
+        await pool.query('COMMIT');
+
+        // 4. Get total scans by this phone number
+        const totalScans = await getTotalScansByPhone(phoneNumber);
+
         res.json({ 
             success: true, 
             message: "QR Code scanned successfully!",
-            data: updateResult.rows[0]
+            scanData: updateResult.rows[0],
+            totalScans: totalScans
         });
 
     } catch (error) {
-        console.error("Database error:", error);
+        await pool.query('ROLLBACK');
+        console.error("Scan error:", error);
         return res.status(500).json({ 
             success: false, 
-            message: "Database error",
+            message: "Error processing QR scan",
             error: error.message 
         });
     }
 });
 
-// Additional endpoint to check QR code status
-app.post("/check-qr", async (req, res) => {
-    const { serialNumber } = req.body;
-    
+// Get all scans for a phone number
+app.get("/scans/:phoneNumber", async (req, res) => {
     try {
-        const result = await pool.query(
-            "SELECT * FROM qr_codes WHERE serial_number = $1",
-            [serialNumber]
-        );
-
-        if (result.rows.length === 0) {
-            return res.json({ exists: false });
+        const { phoneNumber } = req.params;
+        
+        if (!phoneNumber || phoneNumber.length !== 10) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid 10-digit phone number required"
+            });
         }
 
+        const result = await pool.query(
+            `SELECT serial_number, scanned_at 
+             FROM qr_codes 
+             WHERE phone_number = $1
+             ORDER BY scanned_at DESC`,
+            [phoneNumber]
+        );
+
         res.json({
-            exists: true,
-            scanned: result.rows[0].scanned,
-            scannedAt: result.rows[0].scanned_at,
-            phoneNumber: result.rows[0].phone_number
+            success: true,
+            phoneNumber: phoneNumber,
+            totalScans: result.rows.length,
+            scans: result.rows
         });
     } catch (error) {
-        console.error("Error checking QR code:", error);
-        res.status(500).json({ error: "Database error" });
+        console.error("Error fetching scans:", error);
+        res.status(500).json({ success: false, error: error.message });
     }
+});
+
+// Helper function to get total scans by a phone number
+async function getTotalScansByPhone(phoneNumber) {
+    const result = await pool.query(
+        `SELECT COUNT(*) FROM qr_codes WHERE phone_number = $1`,
+        [phoneNumber]
+    );
+    return parseInt(result.rows[0].count, 10);
+}
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+    res.json({
+        status: "healthy",
+        timestamp: new Date(),
+        database: pool ? "connected" : "disconnected"
+    });
 });
 
 // Start the server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+});
+
+process.on('SIGINT', async () => {
+    await pool.end();
+    process.exit();
 });
