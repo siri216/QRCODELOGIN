@@ -31,7 +31,7 @@ app.post("/send-otp", (req, res) => {
 
     const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
     otpStore[phone] = otp;
-    console.log(Generated OTP for ${phone}: ${otp});
+    console.log(`Generated OTP for ${phone}: ${otp}`);
 
     res.json({ otp });
 });
@@ -164,4 +164,4 @@ app.post("/add-qr-code", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(Server running on port ${PORT}));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
