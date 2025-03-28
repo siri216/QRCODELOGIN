@@ -29,7 +29,7 @@ function verifyOTP() {
     let phone = document.getElementById("phone").value;
     let otp = document.getElementById("otp").value;
 
-    fetch("https://qrcodelogin-9741.onrender.com/verify-otp", {
+    fetch("https://qrcodelogin-luiz.onrender.com/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, otp })
