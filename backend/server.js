@@ -1,273 +1,157 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const { Pool } = require('pg');
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const { Pool } = require("pg");
 
 const app = express();
-
-// Middleware
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST']
-}));
+app.use(cors({ origin: "*" }));
 app.use(bodyParser.json());
 
-// Enhanced PostgreSQL Connection Pool Configuration
-const poolConfig = {
-  connectionString: process.env.DATABASE_URL || "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
-  ssl: {
-    rejectUnauthorized: false
-  },
-  max: 10,                 // Maximum number of clients in the pool
-  min: 2,                  // Minimum number of clients in the pool
-  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 5000, // Return error after 5 seconds if connection can't be established
-};
-
-const pool = new Pool(poolConfig);
-
-// Connection error handling
-pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  // Implement reconnection logic here if needed
+// PostgreSQL Database Connection
+const pool = new Pool({
+    connectionString: "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+    ssl: { rejectUnauthorized: false }
 });
 
-// Test connection with retry logic
-async function testConnection(retries = 5, interval = 5000) {
-  let client;
-  for (let i = 0; i < retries; i++) {
-    try {
-      client = await pool.connect();
-      console.log('✅ Database connection successful');
-      await client.query('SELECT 1'); // Test query
-      return true;
-    } catch (err) {
-      console.error(`❌ Connection attempt ${i + 1} failed:`, err.message);
-      if (i < retries - 1) {
-        await new Promise(resolve => setTimeout(resolve, interval));
-      }
-    } finally {
-      if (client) client.release();
-    }
-  }
-  throw new Error('Failed to connect to database after multiple attempts');
-}
+// Test database connection
+pool.connect()
+    .then(() => console.log("Connected to PostgreSQL Database"))
+    .catch((err) => {
+        console.error("Database connection failed: ", err);
+        process.exit(1);
+    });
 
-// OTP Storage (in-memory for demo)
-const otpStore = new Map();
+let otpStore = {};
 
 // Generate and Send OTP
-app.post('/send-otp', (req, res) => {
-  const { phone } = req.body;
+app.post("/send-otp", (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ success: false, message: "Phone number is required!" });
 
-  // Validate phone
-  if (!phone || !/^\d{10}$/.test(phone)) {
-    return res.status(400).json({ 
-      success: false,
-      message: 'Valid 10-digit phone number required'
-    });
-  }
+    const otp = (Math.floor(100000 + Math.random() * 900000)).toString();
+    otpStore[phone] = otp;
+    console.log(Generated OTP for ${phone}: ${otp});
 
-  // Generate 6-digit OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  
-  // Store with timestamp (expires in 5 mins)
-  otpStore.set(phone, {
-    otp,
-    createdAt: Date.now(),
-    attempts: 0
-  });
-
-  console.log(`OTP for ${phone}: ${otp}`); // Remove in production!
-
-  // In production, send via SMS service here
-  res.json({
-    success: true,
-    message: 'OTP sent successfully',
-    otp: otp // Remove this line in production!
-  });
+    res.json({ success: true, otp });
 });
 
 // Verify OTP
-app.post('/verify-otp', (req, res) => {
-  const { phone, otp } = req.body;
-
-  // Validate input
-  if (!phone || !otp || !/^\d{6}$/.test(otp)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Valid phone and 6-digit OTP required'
-    });
-  }
-
-  const storedData = otpStore.get(phone);
-  
-  // Check if OTP exists
-  if (!storedData) {
-    return res.json({
-      success: false,
-      message: 'OTP expired or not found'
-    });
-  }
-
-  // Check expiration (5 minutes)
-  if (Date.now() - storedData.createdAt > 300000) {
-    otpStore.delete(phone);
-    return res.json({
-      success: false,
-      message: 'OTP expired. Please request a new one.'
-    });
-  }
-
-  // Increment attempt counter
-  storedData.attempts++;
-  otpStore.set(phone, storedData);
-
-  // Block after 5 attempts
-  if (storedData.attempts > 5) {
-    otpStore.delete(phone);
-    return res.json({
-      success: false,
-      message: 'Too many attempts. Please request a new OTP.'
-    });
-  }
-
-  // Verify OTP
-  if (storedData.otp === otp) {
-    otpStore.delete(phone);
-    return res.json({
-      success: true,
-      message: 'OTP verified successfully!'
-    });
-  }
-
-  return res.json({
-    success: false,
-    message: 'Invalid OTP',
-    attemptsLeft: 5 - storedData.attempts
-  });
+app.post("/verify-otp", (req, res) => {
+    const { phone, otp } = req.body;
+    if (otpStore[phone] && otpStore[phone].toString() === otp.toString()) {
+        delete otpStore[phone];
+        res.json({ success: true, message: "OTP Verified!" });
+    } else {
+        res.json({ success: false, message: "Invalid OTP! Please try again." });
+    }
 });
 
-// Scan QR Code
-app.post('/scan-qr', async (req, res) => {
-  const { serialNumber, phone } = req.body;
-  
-  if (!serialNumber || !phone) {
-    return res.status(400).json({
-      success: false,
-      message: 'Both serial number and phone are required'
-    });
-  }
-
-  const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
-    
-    // 1. Verify QR code exists
-    const qrCheck = await client.query(
-      'SELECT * FROM qr_codes WHERE serial_number = $1',
-      [serialNumber]
-    );
-
-    if (qrCheck.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.json({
-        success: false,
-        message: 'QR code not found'
-      });
+// Scan QR Code and store with phone number
+app.post("/scan-qr", async (req, res) => {
+    const { serialNumber, phone } = req.body;
+    if (!serialNumber || !phone) {
+        return res.status(400).json({ success: false, message: "Serial number and phone number are required!" });
     }
 
-    // 2. Check if already scanned by this user
-    const scanCheck = await client.query(
-      `SELECT scanned_at FROM user_scans 
-       WHERE phone = $1 AND serial_number = $2`,
-      [phone, serialNumber]
-    );
+    try {
+        // Check if QR code exists
+        const qrCheck = await pool.query(
+            "SELECT id, phone_number, scanned FROM qr_codes WHERE serial_number = $1", 
+            [serialNumber]
+        );
 
-    if (scanCheck.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return res.json({
-        success: false,
-        message: 'You already scanned this code',
-        scannedAt: scanCheck.rows[0].scanned_at
-      });
+        if (qrCheck.rows.length === 0) {
+            return res.json({ success: false, message: "QR Code not found!" });
+        }
+
+        const qrData = qrCheck.rows[0];
+
+        // Case 1: QR already scanned by this user
+        if (qrData.phone_number === phone) {
+            return res.json({ 
+                success: false,
+                message: "You have already scanned this QR code!",
+                duplicate: true
+            });
+        }
+
+        // Case 2: QR already scanned by another user
+        if (qrData.scanned && qrData.phone_number !== phone) {
+            return res.json({ 
+                success: false,
+                message: "This QR code has already been used by another user!",
+                alreadyUsed: true
+            });
+        }
+
+        // Case 3: QR is available for scanning
+        await pool.query(
+            `UPDATE qr_codes 
+             SET scanned = TRUE, phone_number = $1, scan_timestamp = NOW() 
+             WHERE serial_number = $2`,
+            [phone, serialNumber]
+        );
+
+        return res.json({ 
+            success: true,
+            message: "QR Code scanned successfully!"
+        });
+
+    } catch (error) {
+        console.error("Database error:", error);
+        return res.status(500).json({ 
+            success: false,
+            message: "Database error" 
+        });
     }
-
-    // 3. Record the scan
-    await client.query(
-      `INSERT INTO user_scans (phone, serial_number)
-       VALUES ($1, $2)`,
-      [phone, serialNumber]
-    );
-
-    await client.query('COMMIT');
-    
-    return res.json({
-      success: true,
-      message: 'QR code scanned successfully!'
-    });
-
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Scan error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Error processing scan'
-    });
-  } finally {
-    client.release();
-  }
 });
 
-// Health check endpoint
-app.get('/health', async (req, res) => {
-  try {
-    await pool.query('SELECT 1');
-    res.json({ 
-      status: 'healthy',
-      database: 'connected',
-      timestamp: new Date() 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      status: 'unhealthy',
-      database: 'disconnected',
-      error: error.message 
-    });
-  }
+// Get all scanned QR codes for a user
+app.post("/get-user-scans", async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ success: false, message: "Phone number is required!" });
+
+    try {
+        const result = await pool.query(
+            `SELECT serial_number, scan_timestamp as scanned_at 
+             FROM qr_codes 
+             WHERE phone_number = $1 
+             ORDER BY scan_timestamp DESC`,
+            [phone]
+        );
+
+        return res.json({
+            success: true,
+            scans: result.rows,
+            count: result.rows.length
+        });
+
+    } catch (error) {
+        console.error("Database error:", error);
+        return res.status(500).json({ success: false, message: "Database error" });
+    }
 });
 
-// Initialize server after database connection is established
-async function startServer() {
-  try {
-    await testConnection();
-    
-    const PORT = process.env.PORT || 10000;
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  }
-}
+// Add new QR codes (admin endpoint)
+app.post("/add-qr-code", async (req, res) => {
+    const { serialNumber } = req.body;
+    if (!serialNumber) return res.status(400).json({ success: false, message: "Serial number is required!" });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  pool.end(() => {
-    console.log('Pool ended');
-    process.exit(0);
-  });
+    try {
+        await pool.query(
+            "INSERT INTO qr_codes (serial_number) VALUES ($1)",
+            [serialNumber]
+        );
+        return res.json({ success: true, message: "QR Code added successfully!" });
+    } catch (error) {
+        if (error.code === '23505') {
+            return res.status(400).json({ success: false, message: "This QR code already exists!" });
+        }
+        console.error("Database error:", error);
+        return res.status(500).json({ success: false, message: "Database error" });
+    }
 });
 
-process.on('SIGINT', () => {
-  pool.end(() => {
-    console.log('Pool ended');
-    process.exit(0);
-  });
-});
-
-// Start the server
-startServer();
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(Server running on port ${PORT}));
