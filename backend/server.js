@@ -14,12 +14,65 @@ app.use(cors({
 app.use(bodyParser.json());
 
 // Database Connection with Pooling
-const pool = new Pool({
-  connectionString: "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
-  ssl: { rejectUnauthorized: false },
-  max: 10,
-  idleTimeoutMillis: 30000
+const { Pool } = require('pg');
+
+// Enhanced PostgreSQL Connection Pool Configuration
+const poolConfig = {
+  connectionString: process.env.DATABASE_URL || "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+  ssl: {
+    rejectUnauthorized: false
+  },
+  max: 10,                 // Maximum number of clients in the pool
+  min: 2,                  // Minimum number of clients in the pool
+  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+  connectionTimeoutMillis: 5000, // Return error after 5 seconds if connection can't be established
+};
+
+const pool = new Pool(poolConfig);
+
+// Connection error handling
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+  // Implement reconnection logic here if needed
 });
+
+// Test connection with retry logic
+async function testConnection(retries = 5, interval = 5000) {
+  let client;
+  for (let i = 0; i < retries; i++) {
+    try {
+      client = await pool.connect();
+      console.log('✅ Database connection successful');
+      await client.query('SELECT 1'); // Test query
+      return true;
+    } catch (err) {
+      console.error(`❌ Connection attempt ${i + 1} failed:`, err.message);
+      if (i < retries - 1) {
+        await new Promise(resolve => setTimeout(resolve, interval));
+      }
+    } finally {
+      if (client) client.release();
+    }
+  }
+  throw new Error('Failed to connect to database after multiple attempts');
+}
+
+// Initialize server after database connection is established
+async function startServer() {
+  try {
+    await testConnection();
+    
+    const PORT = process.env.PORT || 10000;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 // Test connection
 pool.connect()
