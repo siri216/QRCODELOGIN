@@ -13,9 +13,6 @@ app.use(cors({
 }));
 app.use(bodyParser.json());
 
-// Database Connection with Pooling
-const { Pool } = require('pg');
-
 // Enhanced PostgreSQL Connection Pool Configuration
 const poolConfig = {
   connectionString: process.env.DATABASE_URL || "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
@@ -56,31 +53,6 @@ async function testConnection(retries = 5, interval = 5000) {
   }
   throw new Error('Failed to connect to database after multiple attempts');
 }
-
-// Initialize server after database connection is established
-async function startServer() {
-  try {
-    await testConnection();
-    
-    const PORT = process.env.PORT || 10000;
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  }
-}
-
-startServer();
-
-// Test connection
-pool.connect()
-  .then(() => console.log('Connected to PostgreSQL'))
-  .catch(err => {
-    console.error('Connection error:', err);
-    process.exit(1);
-  });
 
 // OTP Storage (in-memory for demo)
 const otpStore = new Map();
@@ -249,11 +221,38 @@ app.post('/scan-qr', async (req, res) => {
   }
 });
 
-// Start server
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ 
+      status: 'healthy',
+      database: 'connected',
+      timestamp: new Date() 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: error.message 
+    });
+  }
 });
+
+// Initialize server after database connection is established
+async function startServer() {
+  try {
+    await testConnection();
+    
+    const PORT = process.env.PORT || 10000;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
@@ -262,3 +261,13 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
+
+process.on('SIGINT', () => {
+  pool.end(() => {
+    console.log('Pool ended');
+    process.exit(0);
+  });
+});
+
+// Start the server
+startServer();
