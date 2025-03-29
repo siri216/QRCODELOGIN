@@ -8,14 +8,14 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  origin: '*',
   methods: ['GET', 'POST']
 }));
 app.use(bodyParser.json());
 
 // Database Connection with Pooling
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
   ssl: { rejectUnauthorized: false },
   max: 10,
   idleTimeoutMillis: 30000
