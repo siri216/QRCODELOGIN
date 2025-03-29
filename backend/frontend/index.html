@@ -4,124 +4,50 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Login</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        .container {
             max-width: 500px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background-color: white;
-            border-radius: 10px;
-            padding: 25px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            font-family: Arial, sans-serif;
         }
         .logo {
-            display: block;
-            margin: 0 auto 20px;
-            max-width: 150px;
+            max-width: 200px;
+            margin-bottom: 20px;
         }
-        h2 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 25px;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #444;
-        }
-        input {
+        input, button {
+            padding: 10px;
+            margin: 5px 0;
             width: 100%;
-            padding: 12px;
-            margin-bottom: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
+            max-width: 300px;
             box-sizing: border-box;
         }
         button {
-            width: 100%;
-            padding: 12px;
             background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 5px;
-            font-size: 16px;
             cursor: pointer;
-            margin-bottom: 10px;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #45a049;
         }
         button:disabled {
             background-color: #cccccc;
-            cursor: not-allowed;
         }
-        button.secondary {
-            background-color: #f44336;
-        }
-        button.secondary:hover {
-            background-color: #d32f2f;
-        }
-        #otpDisplay {
-            background-color: #f8f9fa;
+        #scanStatus {
+            margin: 10px 0;
             padding: 10px;
             border-radius: 5px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-weight: bold;
-        }
-        #otpTimer {
-            text-align: center;
-            margin: 10px 0;
-            color: #666;
-            font-size: 14px;
         }
         #qr-video {
-            width: 100%;
-            border-radius: 5px;
-            margin-top: 15px;
+            margin: 10px 0;
             border: 2px solid #ddd;
-            display: none;
-        }
-        #scanMessage {
-            text-align: center;
-            margin: 15px 0;
-            padding: 10px;
-            border-radius: 5px;
         }
         #scansList {
             margin-top: 20px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 5px;
-        }
-        #scansList h3 {
-            margin-top: 0;
-            color: #333;
-        }
-        #scansList ul {
-            padding-left: 20px;
-        }
-        #scansList li {
-            margin-bottom: 8px;
-        }
-        .hidden {
-            display: none;
-        }
-        .error {
-            color: #d32f2f;
-            font-size: 14px;
-            margin-top: -10px;
-            margin-bottom: 15px;
+            text-align: left;
         }
     </style>
-    <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
     <div class="container">
@@ -129,30 +55,27 @@
         <h2>QR Code Login</h2>
 
         <!-- Phone Input and Send OTP -->
-        <div id="phoneSection">
-            <label for="phone" id="phoneLabel">Enter Phone Number:</label>
-            <input type="tel" id="phone" placeholder="Enter 10-digit phone number" maxlength="10" pattern="[0-9]{10}" required>
-            <div id="phoneError" class="error hidden"></div>
-            <button id="sendOTP">Send OTP</button>
-        </div>
+        <label for="phone" id="phoneLabel">Enter Phone Number:</label>
+        <input type="tel" id="phone" placeholder="Enter 10-digit phone number" maxlength="10" pattern="[0-9]{10}" required>
+        <br>
+        <button id="sendOTP">Send OTP</button>
 
         <!-- OTP Section (Initially Hidden) -->
-        <div id="otpSection" class="hidden">
+        <div id="otpSection" style="display: none;">
             <p id="otpDisplay"></p>
             <label for="otp" id="otpLabel">Enter OTP:</label>
-            <input type="text" id="otp" placeholder="Enter 6-digit OTP" maxlength="6">
-            <div id="otpError" class="error hidden"></div>
+            <input type="text" id="otp" placeholder="Enter OTP" maxlength="6">
             <div id="otpTimer"></div>
+            <br>
             <button id="verifyOTP">Verify OTP</button>
-            <button id="resendOTP" class="secondary hidden">Resend OTP</button>
+            <button id="resendOTP" style="display: none;">Resend OTP</button>
         </div>
 
         <!-- QR Scanner Section (Initially Hidden) -->
-        <div id="qrSection" class="hidden">
+        <div id="qrSection" style="display: none;">
             <button id="scanQR">Scan QR Code</button>
-            <button id="stopScanner" class="secondary hidden">Stop Scanner</button>
-            <p id="scanMessage"></p>
-            <div id="qr-video"></div>
+            <div id="scanStatus"></div>
+            <div id="qr-video" style="width: 100%;"></div>
             <div id="scansList"></div>
         </div>
     </div>
@@ -163,100 +86,58 @@
         let timeLeft = 30;
         let attemptCount = 0;
         const MAX_ATTEMPTS = 3;
-        const OTP_EXPIRY_SECONDS = 30;
-
-        // Initialize elements
-        const phoneInput = document.getElementById("phone");
-        const sendOTPButton = document.getElementById("sendOTP");
-        const otpSection = document.getElementById("otpSection");
-        const otpDisplay = document.getElementById("otpDisplay");
-        const otpInput = document.getElementById("otp");
-        const verifyOTPButton = document.getElementById("verifyOTP");
-        const resendOTPButton = document.getElementById("resendOTP");
-        const qrSection = document.getElementById("qrSection");
-        const scanQRButton = document.getElementById("scanQR");
-        const stopScannerButton = document.getElementById("stopScanner");
-        const scanMessage = document.getElementById("scanMessage");
-        const qrVideo = document.getElementById("qr-video");
-        const scansList = document.getElementById("scansList");
-        const phoneError = document.getElementById("phoneError");
-        const otpError = document.getElementById("otpError");
 
         // Phone number input validation
-        phoneInput.addEventListener("input", function(e) {
-            this.value = this.value.replace(/[^0-9]/g, '');
+        document.getElementById("phone").addEventListener("input", function(e) {
+            this.value = this.value.replace(/[^0-9]/g, ''); // Only allow numbers
             if (this.value.length > 10) {
-                this.value = this.value.slice(0, 10);
+                this.value = this.value.slice(0, 10); // Limit to 10 digits
             }
-            phoneError.classList.add("hidden");
-        });
-
-        // OTP input validation
-        otpInput.addEventListener("input", function(e) {
-            this.value = this.value.replace(/[^0-9]/g, '');
-            if (this.value.length > 6) {
-                this.value = this.value.slice(0, 6);
-            }
-            otpError.classList.add("hidden");
         });
 
         // Send OTP Functionality
-        sendOTPButton.addEventListener("click", sendOTP);
+        document.getElementById("sendOTP").addEventListener("click", sendOTP);
 
-        async function sendOTP() {
-            const phone = phoneInput.value;
+        function sendOTP() {
+            let phone = document.getElementById("phone").value;
             
             if (phone.length !== 10) {
-                phoneError.textContent = "Please enter exactly 10-digit phone number.";
-                phoneError.classList.remove("hidden");
+                alert("Please enter exactly 10-digit phone number.");
                 return;
             }
 
-            sendOTPButton.disabled = true;
-            sendOTPButton.textContent = "Sending...";
+            fetch("https://qrcodelogin-luiz.onrender.com/send-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone })
+            })
+            .then(res => res.json())
+            .then(data => {
+                attemptCount++;
+                document.getElementById("otpSection").style.display = "block";
+                document.getElementById("otpDisplay").innerText = "Your OTP: " + data.otp;
+                document.getElementById("resendOTP").style.display = "none";
 
-            try {
-                const response = await fetch("https://qrcodelogin-luiz.onrender.com/send-otp", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ phone })
-                });
-                
-                const data = await response.json();
-                
-                if (data.otp) {
-                    attemptCount++;
-                    otpSection.classList.remove("hidden");
-                    otpDisplay.textContent = `Your OTP: ${data.otp}`;
-                    resendOTPButton.classList.add("hidden");
+                document.getElementById("phone").style.display = "none";
+                document.getElementById("sendOTP").style.display = "none";
+                document.getElementById("phoneLabel").style.display = "none";
 
-                    phoneInput.disabled = true;
-                    sendOTPButton.classList.add("hidden");
-                    document.getElementById("phoneLabel").classList.add("hidden");
+                document.getElementById("otp").value = "";
+                document.getElementById("otp").disabled = false;
+                document.getElementById("verifyOTP").disabled = false;
 
-                    otpInput.value = "";
-                    otpInput.disabled = false;
-                    verifyOTPButton.disabled = false;
-
-                    startTimer();
-                } else {
-                    throw new Error(data.message || "Failed to send OTP");
-                }
-            } catch (error) {
+                startTimer();
+            })
+            .catch(error => {
                 console.error("Error sending OTP:", error);
-                phoneError.textContent = error.message;
-                phoneError.classList.remove("hidden");
-            } finally {
-                sendOTPButton.disabled = false;
-                sendOTPButton.textContent = "Send OTP";
-            }
+                alert("Failed to send OTP. Try again.");
+            });
         }
 
         // Resend OTP Functionality
-        resendOTPButton.addEventListener("click", function() {
+        document.getElementById("resendOTP").addEventListener("click", function() {
             if (attemptCount >= MAX_ATTEMPTS) {
-                otpError.textContent = "Maximum attempts reached. Please try again later.";
-                otpError.classList.remove("hidden");
+                alert("Maximum attempts reached. Please try again later.");
                 return;
             }
             sendOTP();
@@ -264,7 +145,7 @@
 
         function startTimer() {
             clearInterval(otpTimer);
-            timeLeft = OTP_EXPIRY_SECONDS;
+            timeLeft = 30;
             updateTimerDisplay();
 
             otpTimer = setInterval(() => {
@@ -273,82 +154,78 @@
 
                 if (timeLeft <= 0) {
                     clearInterval(otpTimer);
-                    otpInput.disabled = true;
-                    verifyOTPButton.disabled = true;
-                    otpDisplay.textContent = "OTP expired. Please request a new one.";
-                    resendOTPButton.classList.remove("hidden");
+                    document.getElementById("otp").disabled = true;
+                    document.getElementById("verifyOTP").disabled = true;
+                    document.getElementById("otpDisplay").innerText = "OTP expired. Please request a new one.";
+                    document.getElementById("resendOTP").style.display = "inline";
                     
                     if (attemptCount >= MAX_ATTEMPTS) {
-                        resendOTPButton.disabled = true;
-                        otpDisplay.textContent = "Maximum attempts reached. Please try again later.";
+                        document.getElementById("resendOTP").disabled = true;
+                        document.getElementById("otpDisplay").innerText = "Maximum attempts reached. Please try again later.";
                     }
                 }
             }, 1000);
         }
 
         function updateTimerDisplay() {
-            document.getElementById("otpTimer").textContent = `Time remaining: ${timeLeft} seconds`;
+            document.getElementById("otpTimer").innerText = "Time remaining: " + timeLeft + " seconds";
         }
 
         // Verify OTP Functionality
-        verifyOTPButton.addEventListener("click", verifyOTP);
+        document.getElementById("verifyOTP").addEventListener("click", function() {
+            let phone = document.getElementById("phone").value;
+            let otp = document.getElementById("otp").value;
 
-        async function verifyOTP() {
-            const phone = phoneInput.value;
-            const otp = otpInput.value;
-
-            if (!otp || otp.length !== 6) {
-                otpError.textContent = "Please enter a valid 6-digit OTP";
-                otpError.classList.remove("hidden");
+            if (!otp) {
+                alert("Please enter the OTP");
                 return;
             }
 
-            verifyOTPButton.disabled = true;
-            verifyOTPButton.textContent = "Verifying...";
-
-            try {
-                const response = await fetch("https://qrcodelogin-luiz.onrender.com/verify-otp", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ phone, otp })
-                });
-                
-                const data = await response.json();
-                
+            fetch("https://qrcodelogin-luiz.onrender.com/verify-otp", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone, otp })
+            })
+            .then(res => res.json())
+            .then(data => {
                 if (data.success) {
                     clearInterval(otpTimer);
-                    qrSection.classList.remove("hidden");
-                    otpSection.classList.add("hidden");
+                    document.getElementById("qrSection").style.display = "block";
+                    document.getElementById("otpSection").style.display = "none";
                     attemptCount = 0;
                     
                     // Load user's scan history after successful login
-                    await loadUserScans(phone);
+                    loadUserScans(phone);
                 } else {
-                    throw new Error(data.message || "Invalid OTP!");
+                    alert("Invalid OTP!");
+                    if (attemptCount >= MAX_ATTEMPTS) {
+                        document.getElementById("otpDisplay").innerText = "Maximum attempts reached. Please try again later.";
+                        document.getElementById("otp").disabled = true;
+                        document.getElementById("verifyOTP").disabled = true;
+                        document.getElementById("resendOTP").disabled = true;
+                        clearInterval(otpTimer);
+                    }
                 }
-            } catch (error) {
+            })
+            .catch(error => {
                 console.error("Error verifying OTP:", error);
-                otpError.textContent = error.message;
-                otpError.classList.remove("hidden");
-                
-                if (attemptCount >= MAX_ATTEMPTS) {
-                    otpDisplay.textContent = "Maximum attempts reached. Please try again later.";
-                    otpInput.disabled = true;
-                    verifyOTPButton.disabled = true;
-                    resendOTPButton.disabled = true;
-                    clearInterval(otpTimer);
-                }
-            } finally {
-                verifyOTPButton.disabled = false;
-                verifyOTPButton.textContent = "Verify OTP";
+                alert("OTP verification failed.");
+            });
+        });
+
+        // Scan QR Code Functionality with user tracking
+        document.getElementById("scanQR").addEventListener("click", function() {
+            const phone = document.getElementById("phone").value;
+            if (!phone) {
+                alert("Please verify your phone number first.");
+                return;
             }
-        }
 
-        // Scan QR Code Functionality
-        scanQRButton.addEventListener("click", startScanner);
-        stopScannerButton.addEventListener("click", stopScanner);
+            document.getElementById("scanQR").disabled = true;
+            document.getElementById("scanStatus").innerHTML = "Preparing scanner...";
+            document.getElementById("scanStatus").style.backgroundColor = "#e6f7ff";
+            document.getElementById("scanStatus").style.color = "#0066cc";
 
-        function startScanner() {
             if (!scanner) {
                 scanner = new Html5QrcodeScanner("qr-video", { 
                     fps: 10, 
@@ -357,119 +234,102 @@
                 });
             }
 
-            scanQRButton.classList.add("hidden");
-            stopScannerButton.classList.remove("hidden");
-            qrVideo.style.display = "block";
-            scanMessage.textContent = "Scanning...";
-            scanMessage.style.color = "#333";
-
             scanner.render(
                 (decodedText) => {
-                    // Success callback
-                    handleScannedQR(decodedText);
+                    scanner.clear();
+                    scanner = null;
+                    handleScannedQR(decodedText, phone);
                 },
                 (errorMessage) => {
-                    // Failure callback
                     console.error("QR Scanner Error:", errorMessage);
-                    scanMessage.textContent = "Scanner error: " + errorMessage;
-                    scanMessage.style.color = "red";
-                    stopScanner();
+                    document.getElementById("scanStatus").innerHTML = "Scanner error: " + errorMessage;
+                    document.getElementById("scanStatus").style.backgroundColor = "#ffebee";
+                    document.getElementById("scanStatus").style.color = "#c62828";
+                    document.getElementById("scanQR").disabled = false;
                 }
             );
-        }
+        });
 
-        function stopScanner() {
-            if (scanner) {
-                scanner.clear().catch(error => {
-                    console.error("Failed to clear scanner:", error);
-                });
-                scanner = null;
-            }
-            scanQRButton.classList.remove("hidden");
-            stopScannerButton.classList.add("hidden");
-            qrVideo.style.display = "none";
-        }
-
-        async function handleScannedQR(decodedText) {
-            stopScanner();
-            scanMessage.textContent = "Processing QR code...";
-            scanMessage.style.color = "#333";
-
-            const phone = phoneInput.value;
+        function handleScannedQR(decodedText, phone) {
+            document.getElementById("scanStatus").innerHTML = "Processing QR code...";
+            document.getElementById("scanStatus").style.backgroundColor = "#e6f7ff";
+            document.getElementById("scanStatus").style.color = "#0066cc";
             
-            try {
-                const response = await fetch("https://qrcodelogin-luiz.onrender.com/scan-qr", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                        serialNumber: decodedText,
-                        phone: phone
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.duplicate) {
-                    scanMessage.textContent = "You've already scanned this QR code!";
-                    scanMessage.style.color = "red";
-                } else if (data.success) {
-                    scanMessage.textContent = "QR Code scanned successfully!";
-                    scanMessage.style.color = "green";
-                    // Refresh the scan history after successful scan
-                    await loadUserScans(phone);
+            fetch("https://qrcodelogin-luiz.onrender.com/scan-qr", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    serialNumber: decodedText,
+                    phone: phone
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById("scanStatus").innerHTML = "QR Code scanned successfully!";
+                    document.getElementById("scanStatus").style.backgroundColor = "#e8f5e9";
+                    document.getElementById("scanStatus").style.color = "#2e7d32";
+                    loadUserScans(phone);
                 } else {
-                    throw new Error(data.message || "Error scanning QR code");
+                    document.getElementById("scanStatus").innerHTML = data.message;
+                    document.getElementById("scanStatus").style.backgroundColor = "#ffebee";
+                    document.getElementById("scanStatus").style.color = "#c62828";
+                    
+                    if (data.alreadyUsed) {
+                        document.getElementById("scanStatus").innerHTML += "<br>This QR code is already assigned to another user.";
+                    }
                 }
-            } catch (error) {
+                document.getElementById("scanQR").disabled = false;
+            })
+            .catch(error => {
                 console.error("Error scanning QR Code:", error);
-                scanMessage.textContent = error.message;
-                scanMessage.style.color = "red";
-            }
+                document.getElementById("scanStatus").innerHTML = "Failed to scan QR Code. Please try again.";
+                document.getElementById("scanStatus").style.backgroundColor = "#ffebee";
+                document.getElementById("scanStatus").style.color = "#c62828";
+                document.getElementById("scanQR").disabled = false;
+            });
         }
 
         // Function to load user's scan history
-        async function loadUserScans(phone) {
-            scanMessage.textContent = "Loading your scan history...";
-            scanMessage.style.color = "#333";
-
-            try {
-                const response = await fetch("https://qrcodelogin-luiz.onrender.com/get-user-scans", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ phone })
-                });
-                
-                const data = await response.json();
-                
+        function loadUserScans(phone) {
+            fetch("https://qrcodelogin-luiz.onrender.com/get-user-scans", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone })
+            })
+            .then(res => res.json())
+            .then(data => {
                 if (data.success) {
-                    const listContainer = document.createElement("div");
-                    listContainer.innerHTML = `<h3>Your Scanned QR Codes (${data.count}):</h3>`;
+                    const scansList = document.createElement("div");
+                    scansList.innerHTML = <h3>Your Scanned QR Codes (${data.count}):</h3>;
                     
-                    if (data.scans && data.scans.length > 0) {
+                    if (data.scans.length > 0) {
                         const list = document.createElement("ul");
                         data.scans.forEach(scan => {
                             const item = document.createElement("li");
-                            item.textContent = `${scan.serial_number} - ${new Date(scan.scanned_at).toLocaleString()}`;
+                            item.textContent = ${scan.serial_number} - ${new Date(scan.scanned_at).toLocaleString()};
                             list.appendChild(item);
                         });
-                        listContainer.appendChild(list);
+                        scansList.appendChild(list);
                     } else {
-                        listContainer.innerHTML += "<p>No QR codes scanned yet.</p>";
+                        scansList.innerHTML += "<p>No QR codes scanned yet.</p>";
                     }
                     
-                    if (scansList) {
-                        scansList.innerHTML = listContainer.innerHTML;
+                    const existingList = document.getElementById("scansList");
+                    if (existingList) {
+                        existingList.replaceWith(scansList);
+                    } else {
+                        scansList.id = "scansList";
+                        document.getElementById("qrSection").appendChild(scansList);
                     }
-                    
-                    scanMessage.textContent = "";
-                } else {
-                    throw new Error(data.message || "Failed to load scan history");
                 }
-            } catch (error) {
-                console.error("Error loading user scans:", error);
-                scanMessage.textContent = error.message;
-                scanMessage.style.color = "red";
-            }
+            })
+            .catch(err => {
+                console.error("Error loading user scans:", err);
+                document.getElementById("scanStatus").innerHTML = "Failed to load scan history";
+                document.getElementById("scanStatus").style.backgroundColor = "#ffebee";
+                document.getElementById("scanStatus").style.color = "#c62828";
+            });
         }
     </script>
 </body>
