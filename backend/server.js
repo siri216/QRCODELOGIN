@@ -9,18 +9,21 @@ app.use(cors({ origin: "*" }));
 app.use(bodyParser.json());
 
 // PostgreSQL Database Connection
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-});
-
-// Test database connection
-pool.connect()
-    .then(() => console.log("Connected to PostgreSQL Database"))
-    .catch((err) => {
-        console.error("Database connection failed: ", err);
-        process.exit(1);
+let pool;
+const createPool = () => {
+    pool = new Pool({
+        connectionString: "postgresql://neondb_owner:npg_k5PVEWXApj9L@ep-wild-sunset-a53nlyyu-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+        ssl: { rejectUnauthorized: false },
+        idleTimeoutMillis: 30000, // Close idle clients after 30s
+        connectionTimeoutMillis: 5000 // Wait 5s for connection
     });
+
+    pool.on("error", (err) => {
+        console.error("Unexpected database error:", err);
+        createPool(); // Recreate pool on error
+    });
+};
+createPool();
 
 let otpStore = {};
 
